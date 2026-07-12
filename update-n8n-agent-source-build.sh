@@ -34,15 +34,49 @@ get_agent_api_key_from_file() {
   awk -F= '$1 == "AGENT_API_KEY" { value=$0; sub(/^AGENT_API_KEY=/, "", value); print value }' "$file" | tail -n1
 }
 
+read_api_key_masked() {
+  local prompt="$1"
+  local value=""
+  local char=""
+
+  printf '%s' "$prompt" >&2
+  while IFS= read -r -s -n1 char; do
+    case "$char" in
+      $'\n'|$'\r')
+        printf '\n' >&2
+        break
+        ;;
+      $'\177'|$'\b')
+        if [ -n "$value" ]; then
+          value="${value%?}"
+          printf '\b \b' >&2
+        fi
+        ;;
+      *)
+        value="${value}${char}"
+        printf '*' >&2
+        ;;
+    esac
+  done
+
+  printf '%s' "$value"
+}
+
 EXISTING_KEY=""
 [ -z "$EXISTING_KEY" ] && EXISTING_KEY="$(get_agent_api_key_from_file "$ENV_FILE")"
 [ -z "$EXISTING_KEY" ] && EXISTING_KEY="$(get_agent_api_key_from_file "$APP_DIR/.env")"
 [ -z "$EXISTING_KEY" ] && EXISTING_KEY="$(get_agent_api_key_from_file "/opt/n8n/.env")"
-FINAL_KEY="${AGENT_API_KEY:-$EXISTING_KEY}"
-if [ -z "$FINAL_KEY" ]; then
-  read -r -s -p "AGENT_API_KEY: " FINAL_KEY
-  echo
+
+if [ -n "${AGENT_API_KEY:-}" ]; then
+  FINAL_KEY="$AGENT_API_KEY"
+else
+  FINAL_KEY="$(read_api_key_masked 'Nhập API Key của N8N-Agent: ')"
+  if [ -z "$FINAL_KEY" ] && [ -n "$EXISTING_KEY" ]; then
+    log "Không nhập API key mới, sử dụng API key hiện có trong env file."
+    FINAL_KEY="$EXISTING_KEY"
+  fi
 fi
+
 [ -n "$FINAL_KEY" ] || fail "AGENT_API_KEY is required"
 TMP_ENV="$(mktemp)"
 [ -f "$ENV_FILE" ] && grep -v '^AGENT_API_KEY=' "$ENV_FILE" > "$TMP_ENV" 2>/dev/null || true
