@@ -27,4 +27,12 @@ log "Kiểm tra cú pháp script chính"
 bash -n "$SCRIPT_PATH"
 
 log "Chạy script cập nhật n8n-agent"
-bash "$SCRIPT_PATH"
+
+# Khi chạy wrapper bằng `curl ... | bash`, stdin của wrapper là nội dung tải từ curl,
+# không phải bàn phím. Vì script chính cần hỏi API key tương tác, phải nối stdin
+# của script chính về terminal thật.
+if [ -r /dev/tty ]; then
+  bash "$SCRIPT_PATH" < /dev/tty
+else
+  fail "Không tìm thấy /dev/tty để nhập API key. Hãy tải file rồi chạy: bash $SCRIPT_PATH"
+fi

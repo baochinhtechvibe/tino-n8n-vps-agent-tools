@@ -30,19 +30,20 @@ Wrapper này sẽ tự động:
 
 1. Kiểm tra đang chạy bằng user `root`.
 2. Kiểm tra VPS có `bash` và `curl`.
-3. Tải script chính về:
+3. Khi chạy qua `curl | bash`, tự chuyển phần nhập API key về terminal thật (`/dev/tty`) để anh vẫn nhập được key tương tác.
+4. Tải script chính về:
 
 ```text
 /root/update-n8n-agent-source-build.sh
 ```
 
-4. Kiểm tra cú pháp script chính bằng:
+5. Kiểm tra cú pháp script chính bằng:
 
 ```bash
 bash -n /root/update-n8n-agent-source-build.sh
 ```
 
-5. Nếu cú pháp OK, chạy script chính:
+6. Nếu cú pháp OK, chạy script chính:
 
 ```bash
 bash /root/update-n8n-agent-source-build.sh
