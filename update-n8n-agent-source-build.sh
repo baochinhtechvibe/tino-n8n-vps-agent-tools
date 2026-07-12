@@ -27,10 +27,17 @@ tar -C /root -czf "$BACKUP_DIR.tar.gz" "$(basename "$BACKUP_DIR")"
 log "Backup archive: $BACKUP_DIR.tar.gz"
 
 log "Preparing API key env file"
+
+get_agent_api_key_from_file() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  awk -F= '$1 == "AGENT_API_KEY" { value=$0; sub(/^AGENT_API_KEY=/, "", value); print value }' "$file" | tail -n1
+}
+
 EXISTING_KEY=""
-[ -f "$ENV_FILE" ] && EXISTING_KEY="$(grep '^AGENT_API_KEY=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)"
-[ -z "$EXISTING_KEY" ] && [ -f "$APP_DIR/.env" ] && EXISTING_KEY="$(grep '^AGENT_API_KEY=' "$APP_DIR/.env" 2>/dev/null | tail -n1 | cut -d= -f2-)"
-[ -z "$EXISTING_KEY" ] && [ -f /opt/n8n/.env ] && EXISTING_KEY="$(grep '^AGENT_API_KEY=' /opt/n8n/.env 2>/dev/null | tail -n1 | cut -d= -f2-)"
+[ -z "$EXISTING_KEY" ] && EXISTING_KEY="$(get_agent_api_key_from_file "$ENV_FILE")"
+[ -z "$EXISTING_KEY" ] && EXISTING_KEY="$(get_agent_api_key_from_file "$APP_DIR/.env")"
+[ -z "$EXISTING_KEY" ] && EXISTING_KEY="$(get_agent_api_key_from_file "/opt/n8n/.env")"
 FINAL_KEY="${AGENT_API_KEY:-$EXISTING_KEY}"
 if [ -z "$FINAL_KEY" ]; then
   read -r -s -p "AGENT_API_KEY: " FINAL_KEY
