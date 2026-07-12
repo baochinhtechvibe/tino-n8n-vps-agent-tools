@@ -2,25 +2,76 @@
 
 Bộ script hỗ trợ quản lý và cập nhật `n8n-agent` trên các VPS n8n của Tino Group.
 
-## Mục đích
+## Cách sử dụng nhanh
 
-Repo này dùng để lưu các script hỗ trợ bảo trì n8n VPS agent.
+SSH vào VPS n8n bằng quyền `root`, sau đó chạy một lệnh duy nhất:
 
-Script hiện tại được thiết kế để:
+```bash
+curl -fsSL https://raw.githubusercontent.com/baochinhtechvibe/tino-n8n-vps-agent-tools/main/run-update-n8n-agent.sh | bash
+```
 
-- Backup service `n8n-agent`, binary cũ, source build cũ và các file môi trường cần thiết trước khi thay đổi.
-- Giữ `AGENT_API_KEY` trong file riêng `/etc/n8n-agent.env` để tránh mất key khi cập nhật service.
-- Lấy source mới nhất từ repo `tinovn/n8n-manage`.
-- Build backend `n8n-agent` trực tiếp trên VPS.
-- Chuyển systemd service `n8n-agent` sang chạy bản source đã build.
-- Restart và kiểm tra lại API của `n8n-agent`.
-- In hướng dẫn rollback sau mỗi lần chạy.
+Sau đó script sẽ hỏi:
+
+```text
+Nhập API Key của N8N-Agent:
+```
+
+Khi anh nhập API key, terminal sẽ hiển thị dạng `********` để biết đang nhập, nhưng **không hiện key thật**.
+
+## Script một dòng sẽ làm gì?
+
+Lệnh trên tải và chạy wrapper:
+
+```text
+run-update-n8n-agent.sh
+```
+
+Wrapper này sẽ tự động:
+
+1. Kiểm tra đang chạy bằng user `root`.
+2. Kiểm tra VPS có `bash` và `curl`.
+3. Tải script chính về:
+
+```text
+/root/update-n8n-agent-source-build.sh
+```
+
+4. Kiểm tra cú pháp script chính bằng:
+
+```bash
+bash -n /root/update-n8n-agent-source-build.sh
+```
+
+5. Nếu cú pháp OK, chạy script chính:
+
+```bash
+bash /root/update-n8n-agent-source-build.sh
+```
+
+Vì vậy khi dùng cách một dòng, anh không cần tự chạy các lệnh sau nữa:
+
+```bash
+chmod +x /root/update-n8n-agent-source-build.sh
+bash -n /root/update-n8n-agent-source-build.sh
+bash /root/update-n8n-agent-source-build.sh
+```
 
 ## Script hiện có
 
+### `run-update-n8n-agent.sh`
+
+Wrapper dùng cho kỹ thuật chạy nhanh trên VPS n8n.
+
+Chức năng:
+
+- Tải script chính từ GitHub raw.
+- Lưu vào `/root/update-n8n-agent-source-build.sh`.
+- Kiểm tra cú pháp script chính.
+- Chạy script chính.
+
 ### `update-n8n-agent-source-build.sh`
 
-Script này build và chạy source mới nhất từ `tinovn/n8n-manage` dưới dạng service `n8n-agent` local trên VPS.
+Script chính dùng để build và chạy source mới nhất từ `tinovn/n8n-manage` dưới dạng service `n8n-agent` local trên VPS.
 
 Dùng trong trường hợp binary đóng gói ở repo `tinovn/n8n-agent` chưa được build/release lại, nhưng VPS cần nhận các bản sửa mới từ `n8n-manage`.
 
@@ -36,38 +87,15 @@ Ví dụ lỗi từng gặp:
 
 Nguyên nhân thường là binary `n8n-agent` cũ vẫn đang dùng logic Docker Hub tags cũ, ví dụ chỉ lấy `page_size=15`, dẫn tới danh sách version bị rỗng.
 
-## Cách sử dụng nhanh trên VPS n8n
-
-SSH vào VPS n8n bằng quyền `root`, sau đó chạy:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/baochinhtechvibe/tino-n8n-vps-agent-tools/main/update-n8n-agent-source-build.sh \
-  -o /root/update-n8n-agent-source-build.sh
-
-chmod +x /root/update-n8n-agent-source-build.sh
-bash -n /root/update-n8n-agent-source-build.sh
-bash /root/update-n8n-agent-source-build.sh
-```
-
-Sau khi chạy, script sẽ hỏi:
-
-```text
-Nhập API Key của N8N-Agent:
-```
-
-Khi anh nhập API key, terminal sẽ hiển thị dạng `****` để dễ biết mình đang nhập, nhưng không hiện key thật.
-
-> Không commit API key thật vào repo. Chỉ nhập khi chạy script hoặc lưu ở `/etc/n8n-agent.env` trên VPS.
-
 ## Cách script xử lý API key
 
-Mặc định khi chạy trực tiếp:
+Mặc định khi chạy bằng lệnh một dòng:
 
 ```bash
-bash /root/update-n8n-agent-source-build.sh
+curl -fsSL https://raw.githubusercontent.com/baochinhtechvibe/tino-n8n-vps-agent-tools/main/run-update-n8n-agent.sh | bash
 ```
 
-script sẽ hỏi nhập API key và hiển thị ký tự `*` khi nhập.
+script chính sẽ hỏi nhập API key và hiển thị ký tự `*` khi nhập.
 
 Nếu anh không nhập gì rồi bấm Enter, script sẽ thử dùng key cũ trong các file sau:
 
@@ -82,12 +110,12 @@ Nếu vẫn không tìm thấy key, script sẽ dừng và báo lỗi.
 Ngoài ra vẫn có thể truyền key bằng biến môi trường nếu cần chạy tự động:
 
 ```bash
-AGENT_API_KEY='YOUR_SECRET_KEY' bash /root/update-n8n-agent-source-build.sh
+curl -fsSL https://raw.githubusercontent.com/baochinhtechvibe/tino-n8n-vps-agent-tools/main/run-update-n8n-agent.sh | AGENT_API_KEY='YOUR_SECRET_KEY' bash
 ```
 
-Cách này phù hợp cho automation, nhưng khi thao tác thủ công nên chạy `bash /root/update-n8n-agent-source-build.sh` để script hỏi key.
+Cách này phù hợp cho automation. Khi thao tác thủ công, nên chạy lệnh một dòng bình thường để script hỏi key.
 
-## Script sẽ thay đổi gì?
+## Script chính sẽ thay đổi gì trên VPS?
 
 Trước khi chạy, service thường dùng binary đóng gói:
 
@@ -119,9 +147,9 @@ và nên có quyền:
 chmod 600 /etc/n8n-agent.env
 ```
 
-## Quy trình script thực hiện
+## Quy trình script chính thực hiện
 
-Script sẽ chạy theo thứ tự:
+Script `update-n8n-agent-source-build.sh` sẽ chạy theo thứ tự:
 
 1. Kiểm tra đang chạy bằng user `root`.
 2. Backup service, app cũ, source cũ và env file.
