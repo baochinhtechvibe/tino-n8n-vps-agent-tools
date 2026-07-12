@@ -42,7 +42,7 @@ read_api_key_masked() {
   printf '%s' "$prompt" >&2
   while IFS= read -r -s -n1 char; do
     case "$char" in
-      $'\n'|$'\r')
+      ""|$'\n'|$'\r')
         printf '\n' >&2
         break
         ;;
