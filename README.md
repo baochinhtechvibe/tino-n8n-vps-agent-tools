@@ -32,14 +32,20 @@ Script chính `update-n8n-agent-source-build.sh` sẽ:
 2. Lưu `AGENT_API_KEY` vào `/etc/n8n-agent.env` với quyền `600`.
 3. Clone/cập nhật source `tinovn/n8n-manage` vào `/opt/n8n-agent-src`.
 4. Patch local `page_size=15` sang `page_size=100` nếu source vẫn còn logic cũ.
-5. Chạy `npm ci` và `npm run build`.
-6. Ghi lại systemd unit `n8n-agent.service` để chạy:
+5. Patch local flow nâng cấp n8n để:
+   - VPS khởi tạo ban đầu vẫn dùng `dockerhub.tino.org/library/n8nio/n8n:latest`.
+   - Khi nâng cấp version cụ thể, compose đổi sang `n8nio/n8n:<version>` để pull từ Docker Hub gốc.
+   - Hỗ trợ cả compose mới dùng `dockerfile_inline` và compose cũ dùng `image:` cho `n8n`/`n8n-worker`.
+   - Không `docker compose down` trước khi build/pull.
+   - Verify version thật bằng `docker compose exec -T n8n n8n --version`.
+6. Chạy `npm ci` và `npm run build`.
+7. Ghi lại systemd unit `n8n-agent.service` để chạy:
 
 ```text
 /usr/bin/node /opt/n8n-agent-src/dist/main.js
 ```
 
-7. Restart service và kiểm tra API `/api/n8n/version`.
+8. Restart service và kiểm tra API `/api/n8n/version`.
 
 ## Kiểm tra sau khi chạy
 

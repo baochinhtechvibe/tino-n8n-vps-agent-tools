@@ -119,6 +119,234 @@ p.write_text(s)
 PY
 fi
 
+log "Patching n8n version update flow"
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+p = Path('src/n8n/n8n.service.ts')
+s = p.read_text()
+orig = s
+
+helper = """function getN8nBaseImage(version: string): string {
+  if (version === 'latest') {
+    return 'dockerhub.tino.org/library/n8nio/n8n:latest';
+  }
+
+  return `n8nio/n8n:${version}`;
+}
+
+"""
+if 'function getN8nBaseImage(version: string): string' not in s:
+    s = s.replace('function makeDockerfileInline(version: string): string {', helper + 'function makeDockerfileInline(version: string): string {')
+
+s = re.sub(
+    r'FROM dockerhub\.tino\.org/library/n8nio/n8n:\$\{version\}',
+    r'FROM ${getN8nBaseImage(version)}',
+    s,
+)
+s = s.replace("const command = 'docker compose exec n8n n8n --version';", "const command = 'docker compose exec -T n8n n8n --version';")
+
+new_helpers = """  private updateN8nServiceImagesInCompose(composeContent: string, version: string): string {
+    const targetImage = getN8nBaseImage(version);
+    const serviceNames = ['n8n', 'n8n-worker'];
+    let updatedContent = composeContent;
+
+    for (const serviceName of serviceNames) {
+      const serviceBlockRegex = new RegExp(
+        `(\\n  ${serviceName}:\\n[\\s\\S]*?)(?=\\n  [a-zA-Z0-9_-]+:\\n|\\nvolumes:\\n|\\nnetworks:\\n|$)`,
+        'g',
+      );
+
+      updatedContent = updatedContent.replace(serviceBlockRegex, (serviceBlock) => {
+        const imageRegex = /^(\\s*image:\\s*)(?:dockerhub\\.tino\\.org\\/library\\/)?n8nio\\/n8n:[^\\s#]+(\\s*(?:#.*)?)$/m;
+
+        if (!imageRegex.test(serviceBlock)) {
+          return serviceBlock;
+        }
+
+        return serviceBlock.replace(imageRegex, `$1${targetImage}$2`);
+      });
+    }
+
+    return updatedContent;
+  }
+
+  private async composeUsesInlineBuild(): Promise<boolean> {
+    const composePath = path.join(this.instancePath, 'docker-compose.yml');
+    const composeContent = await fs.readFile(composePath, 'utf-8');
+    return composeContent.includes('dockerfile_inline: |');
+  }
+
+"""
+replacement_update_compose = """  private async updateDockerComposeVersion(version: string) {
+    const composePath = path.join(this.instancePath, 'docker-compose.yml');
+    const originalComposeContent = await fs.readFile(composePath, 'utf-8');
+    let composeContent = originalComposeContent;
+
+    if (composeContent.includes('dockerfile_inline: |')) {
+      const newInline = makeDockerfileInline(version);
+      const inlineRegex = /dockerfile_inline: \\|[\\s\\S]*?(?=\\n    \\w|\\n  \\w)/g;
+      const replacement = `dockerfile_inline: |\\n        ${newInline.split('\\n').join('\\n        ')}`;
+      composeContent = composeContent.replace(inlineRegex, replacement);
+    }
+
+    composeContent = this.updateN8nServiceImagesInCompose(composeContent, version);
+
+    if (composeContent === originalComposeContent) {
+      throw new Error(
+        'Could not update docker-compose.yml: no supported n8n dockerfile_inline or n8n image block found.',
+      );
+    }
+
+    await fs.writeFile(composePath, composeContent);
+  }"""
+
+s2, n = re.subn(
+    r"  private async updateDockerComposeVersion\(version: string\) \{[\s\S]*?\n  \}\n\n  async getVersionInfo\(\)",
+    lambda _m: replacement_update_compose + "\n\n  async getVersionInfo()",
+    s,
+    count=1,
+)
+s = s2
+
+if 'private updateN8nServiceImagesInCompose(' not in s:
+    s = s.replace('  async getVersionInfo() {', new_helpers + '  async getVersionInfo() {')
+
+old_update = """  updateToVersion(version: string): string {
+    this.lockOperation('updateToVersion');
+    const task = this.tasksService.create(`Updating n8n to version ${version}`);
+    this.executeInBackground('updateToVersion', task.id, async () => {
+      await this.checkInstanceExists(true);
+      await this.updateDockerComposeVersion(version);
+      await this.shellService.execute('docker compose down', this.instancePath);
+      await this.shellService.execute('docker compose build --no-cache', this.instancePath);
+      const { stdout } = await this.shellService.execute('docker compose up -d', this.instancePath);
+      return {
+        message: `Update to version ${version} completed.`,
+        log: stdout,
+      };
+    });
+    return task.id;
+  }
+"""
+new_update = """  updateToVersion(version: string): string {
+    this.lockOperation('updateToVersion');
+    const task = this.tasksService.create(`Updating n8n to version ${version}`);
+    this.executeInBackground('updateToVersion', task.id, async () => {
+      await this.checkInstanceExists(true);
+      await this.updateDockerComposeVersion(version);
+      await this.shellService.execute('docker compose config -q', this.instancePath);
+
+      const usesInlineBuild = await this.composeUsesInlineBuild();
+      if (usesInlineBuild) {
+        await this.shellService.execute(
+          'docker compose build --pull --no-cache n8n n8n-worker',
+          this.instancePath,
+        );
+      } else {
+        await this.shellService.execute('docker compose pull n8n n8n-worker', this.instancePath);
+      }
+
+      const { stdout } = await this.shellService.execute(
+        'docker compose up -d --force-recreate n8n n8n-worker',
+        this.instancePath,
+      );
+      const current = await this.getCurrentVersion();
+
+      if (current !== version) {
+        throw new Error(`Update failed: expected n8n ${version}, but container is running ${current}`);
+      }
+
+      return {
+        message: `Update to version ${version} completed.`,
+        current,
+        log: stdout,
+      };
+    });
+    return task.id;
+  }
+"""
+if old_update in s:
+    s = s.replace(old_update, new_update)
+
+old_upgrade = """  upgrade(): string {
+    this.lockOperation('upgrade');
+    const task = this.tasksService.create('Upgrading n8n to latest version');
+    this.executeInBackground('upgrade', task.id, async () => {
+      await this.checkInstanceExists(true);
+      await this.updateDockerComposeVersion('latest');
+      await this.shellService.execute('docker compose down', this.instancePath);
+      await this.shellService.execute('docker compose build --no-cache', this.instancePath);
+      const { stdout } = await this.shellService.execute('docker compose up -d', this.instancePath);
+      return { message: 'Upgrade completed.', log: stdout };
+    });
+    return task.id;
+  }
+"""
+new_upgrade = """  upgrade(): string {
+    this.lockOperation('upgrade');
+    const task = this.tasksService.create('Upgrading n8n to latest version');
+    this.executeInBackground('upgrade', task.id, async () => {
+      await this.checkInstanceExists(true);
+      const available = await this.getAvailableVersions();
+      const latestVersion = available.latest?.version;
+
+      if (!latestVersion) {
+        throw new Error('Could not determine latest n8n version.');
+      }
+
+      await this.updateDockerComposeVersion(latestVersion);
+      await this.shellService.execute('docker compose config -q', this.instancePath);
+
+      const usesInlineBuild = await this.composeUsesInlineBuild();
+      if (usesInlineBuild) {
+        await this.shellService.execute(
+          'docker compose build --pull --no-cache n8n n8n-worker',
+          this.instancePath,
+        );
+      } else {
+        await this.shellService.execute('docker compose pull n8n n8n-worker', this.instancePath);
+      }
+
+      const { stdout } = await this.shellService.execute(
+        'docker compose up -d --force-recreate n8n n8n-worker',
+        this.instancePath,
+      );
+      const current = await this.getCurrentVersion();
+
+      if (current !== latestVersion) {
+        throw new Error(
+          `Upgrade failed: expected n8n ${latestVersion}, but container is running ${current}`,
+        );
+      }
+
+      return { message: `Upgrade to version ${latestVersion} completed.`, current, log: stdout };
+    });
+    return task.id;
+  }
+"""
+if old_upgrade in s:
+    s = s.replace(old_upgrade, new_upgrade)
+
+required_markers = [
+    'function getN8nBaseImage(version: string): string',
+    'FROM ${getN8nBaseImage(version)}',
+    'private updateN8nServiceImagesInCompose(',
+    'docker compose config -q',
+    'docker compose exec -T n8n n8n --version',
+]
+missing = [marker for marker in required_markers if marker not in s]
+if missing:
+    raise SystemExit('n8n upgrade patch incomplete; missing markers: ' + ', '.join(missing))
+
+if s == orig:
+    print('n8n upgrade flow already patched')
+else:
+    p.write_text(s)
+    print('Patched src/n8n/n8n.service.ts')
+PY
+
 log "Installing npm dependencies"
 npm ci
 log "Building source"
