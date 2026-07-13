@@ -72,6 +72,29 @@ Kết quả cần có `latest` và `all`, không còn dạng:
 }
 ```
 
+## Tối ưu dung lượng VPS n8n
+
+Script `optimize-n8n-vps-disk.sh` dùng để kiểm tra và dọn dung lượng VPS n8n an toàn. Mặc định chỉ dry-run, không xoá gì:
+
+```bash
+curl -fsSL -o /root/optimize-n8n-vps-disk.sh https://raw.githubusercontent.com/baochinhtechvibe/tino-n8n-vps-agent-tools/main/optimize-n8n-vps-disk.sh
+bash /root/optimize-n8n-vps-disk.sh
+```
+
+Dọn thật mức an toàn nhất, chỉ xoá Docker image dangling, apt cache, journal và backup n8n-agent cũ:
+
+```bash
+bash /root/optimize-n8n-vps-disk.sh --apply
+```
+
+Dọn mạnh hơn, xoá Docker image không container nào dùng, giải phóng nhiều dung lượng hơn nhưng khi rollback/update có thể phải pull lại image:
+
+```bash
+bash /root/optimize-n8n-vps-disk.sh --apply --prune-unused
+```
+
+Script **không xoá Docker volumes** để tránh mất dữ liệu n8n/Postgres/Redis/NocoDB.
+
 ## Backup
 
 Mỗi lần chạy, script tạo backup tại:
