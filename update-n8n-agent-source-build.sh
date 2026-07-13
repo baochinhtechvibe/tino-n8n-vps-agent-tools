@@ -206,13 +206,9 @@ replacement_update_compose = """  private async updateDockerComposeVersion(versi
 
     composeContent = this.updateN8nServiceImagesInCompose(composeContent, version);
 
-    if (composeContent === originalComposeContent) {
-      throw new Error(
-        'Could not update docker-compose.yml: no supported n8n dockerfile_inline or n8n image block found.',
-      );
+    if (composeContent !== originalComposeContent) {
+      await fs.writeFile(composePath, composeContent);
     }
-
-    await fs.writeFile(composePath, composeContent);
   }"""
 
 s2, n = re.subn(
