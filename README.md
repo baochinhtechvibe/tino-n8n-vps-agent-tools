@@ -36,6 +36,7 @@ Script chính `update-n8n-agent-source-build.sh` sẽ:
    - VPS khởi tạo ban đầu vẫn dùng `dockerhub.tino.org/library/n8nio/n8n:latest`.
    - Khi nâng cấp version cụ thể, compose đổi sang `n8nio/n8n:<version>` để pull từ Docker Hub gốc.
    - Hỗ trợ cả compose mới dùng `dockerfile_inline` và compose cũ dùng `image:` cho `n8n`/`n8n-worker`.
+   - Tự sửa lỗi indent phổ biến ở block `n8n-worker` như `depends_on:` hoặc `command:` bị tụt ra đầu dòng.
    - Không `docker compose down` trước khi build/pull.
    - Verify version thật bằng `docker compose exec -T n8n n8n --version`.
 6. Chạy `npm ci` và `npm run build`.

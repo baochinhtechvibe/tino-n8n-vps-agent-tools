@@ -147,7 +147,18 @@ s = re.sub(
 )
 s = s.replace("const command = 'docker compose exec n8n n8n --version';", "const command = 'docker compose exec -T n8n n8n --version';")
 
-new_helpers = """  private updateN8nServiceImagesInCompose(composeContent: string, version: string): string {
+new_helpers = """  private repairKnownComposeIndentation(composeContent: string): string {
+    const serviceBlockRegex = /(\\n  n8n-worker:\\n[\\s\\S]*?)(?=\\n  [a-zA-Z0-9_-]+:\\n|\\nvolumes:\\n|\\nnetworks:\\n|$)/g;
+
+    return composeContent.replace(serviceBlockRegex, (serviceBlock) => {
+      return serviceBlock.replace(
+        /^(command|depends_on|environment|volumes):/gm,
+        '    $1:',
+      );
+    });
+  }
+
+  private updateN8nServiceImagesInCompose(composeContent: string, version: string): string {
     const targetImage = getN8nBaseImage(version);
     const serviceNames = ['n8n', 'n8n-worker'];
     let updatedContent = composeContent;
@@ -183,6 +194,8 @@ replacement_update_compose = """  private async updateDockerComposeVersion(versi
     const composePath = path.join(this.instancePath, 'docker-compose.yml');
     const originalComposeContent = await fs.readFile(composePath, 'utf-8');
     let composeContent = originalComposeContent;
+
+    composeContent = this.repairKnownComposeIndentation(composeContent);
 
     if (composeContent.includes('dockerfile_inline: |')) {
       const newInline = makeDockerfileInline(version);
@@ -332,6 +345,7 @@ if old_upgrade in s:
 required_markers = [
     'function getN8nBaseImage(version: string): string',
     'FROM ${getN8nBaseImage(version)}',
+    'private repairKnownComposeIndentation(',
     'private updateN8nServiceImagesInCompose(',
     'docker compose config -q',
     'docker compose exec -T n8n n8n --version',
