@@ -160,27 +160,11 @@ new_helpers = """  private repairKnownComposeIndentation(composeContent: string)
 
   private updateN8nServiceImagesInCompose(composeContent: string, version: string): string {
     const targetImage = getN8nBaseImage(version);
-    const serviceNames = ['n8n', 'n8n-worker'];
-    let updatedContent = composeContent;
 
-    for (const serviceName of serviceNames) {
-      const serviceBlockRegex = new RegExp(
-        `(\\n  ${serviceName}:\\n[\\s\\S]*?)(?=\\n  [a-zA-Z0-9_-]+:\\n|\\nvolumes:\\n|\\nnetworks:\\n|$)`,
-        'g',
-      );
-
-      updatedContent = updatedContent.replace(serviceBlockRegex, (serviceBlock) => {
-        const imageRegex = /^(\\s*image:\\s*)(?:dockerhub\\.tino\\.org\\/library\\/)?n8nio\\/n8n:[^\\s#]+(\\s*(?:#.*)?)$/m;
-
-        if (!imageRegex.test(serviceBlock)) {
-          return serviceBlock;
-        }
-
-        return serviceBlock.replace(imageRegex, `$1${targetImage}$2`);
-      });
-    }
-
-    return updatedContent;
+    return composeContent.replace(
+      /^(\\s*image:\\s*)(?:dockerhub\\.tino\\.org\\/library\\/)?n8nio\\/n8n:[^\\s#]+(\\s*(?:#.*)?)$/gm,
+      `$1${targetImage}$2`,
+    );
   }
 
   private async composeUsesInlineBuild(): Promise<boolean> {
