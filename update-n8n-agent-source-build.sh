@@ -324,13 +324,14 @@ if old_upgrade in s:
 
 required_markers = [
     'function getN8nBaseImage(version: string): string',
-    'FROM ${getN8nBaseImage(version)}',
     'private repairKnownComposeIndentation(',
     'private updateN8nServiceImagesInCompose(',
     'docker compose config -q',
     'docker compose exec -T n8n n8n --version',
 ]
 missing = [marker for marker in required_markers if marker not in s]
+if 'FROM ${getN8nBaseImage(version)}' not in s and 'FROM n8nio/n8n:${version}' not in s:
+    missing.append('FROM ${getN8nBaseImage(version)} or FROM n8nio/n8n:${version}')
 if missing:
     raise SystemExit('n8n upgrade patch incomplete; missing markers: ' + ', '.join(missing))
 
